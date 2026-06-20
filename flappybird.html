@@ -1,0 +1,280 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Flappy Bird</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{
+background:#1a1a2e;
+display:flex;justify-content:center;align-items:center;
+min-height:100vh;overflow:hidden;
+font-family:'Arial',sans-serif;
+}
+.game-wrapper{
+background:#16213e;border-radius:24px;padding:24px;
+box-shadow:0 0 80px rgba(0,200,255,0.08),inset 0 0 40px rgba(0,0,0,0.3);
+border:1px solid rgba(255,255,255,0.05);
+}
+canvas{
+display:block;border-radius:12px;background:#4dc9f6;
+box-shadow:0 0 40px rgba(0,200,255,0.15);
+}
+.controls{
+display:flex;justify-content:center;gap:12px;margin-top:16px;
+}
+.btn{
+background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.1);
+color:#aaa;padding:8px 24px;border-radius:8px;
+font-family:inherit;font-size:14px;cursor:pointer;transition:all .2s;
+}
+.btn:hover{background:rgba(0,200,255,0.1);color:#4dc9f6;border-color:rgba(0,200,255,0.3)}
+@media(max-width:500px){
+.game-wrapper{padding:12px;border-radius:16px}
+.btn{padding:6px 16px;font-size:12px}
+}
+</style>
+</head>
+<body>
+<div class="game-wrapper">
+<canvas id="c" width="400" height="600"></canvas>
+<div class="controls">
+<button class="btn" id="startBtn">START</button>
+</div>
+</div>
+<script>
+const c=document.getElementById('c'),ctx=c.getContext('2d');
+const W=400,H=600,GRAVITY=0.45,FLAP=-7,PIPE_W=52,GAP=140,PIPE_SPEED=2.5;
+let bird, pipes, score, hi, state, last, pt, clouds, groundX;
+
+hi=parseInt(localStorage.getItem('fbhi'))||0;
+
+function reset(){
+bird={x:80,y:250,vy:0,r:14,rot:0,flap:0};
+pipes=[];
+score=0;
+pt=0;
+groundX=0;
+clouds=[];
+for(let i=0;i<5;i++)clouds.push({x:Math.random()*W,y:30+Math.random()*120,s:0.5+Math.random()*0.8,speed:0.2+Math.random()*0.3});
+state='idle';
+}
+
+function addPipe(){
+const topH=60+Math.random()*(H-280-GAP);
+pipes.push({x:W+20,top:topH,bot:topH+GAP,passed:false});
+}
+
+function flap(){
+if(state==='idle'){state='play';bird.vy=FLAP;bird.flap=1;}
+else if(state==='play'){bird.vy=FLAP;bird.flap=1;}
+}
+
+function update(dt){
+if(state==='idle'){
+bird.y=250+Math.sin(Date.now()/300)*8;
+bird.rot=0;
+return;
+}
+if(state==='over')return;
+
+pt+=dt;
+if(pt>1.4){pt=0;addPipe();}
+
+bird.vy+=GRAVITY;
+bird.y+=bird.vy;
+bird.rot=Math.max(-0.5,Math.min(bird.vy*0.08,1.2));
+if(bird.flap>0)bird.flap-=dt*6;
+
+for(let i=pipes.length-1;i>=0;i--){
+const p=pipes[i];
+p.x-=PIPE_SPEED;
+if(p.x+PIPE_W<0){pipes.splice(i,1);continue;}
+if(!p.passed&&p.x+PIPE_W<bird.x){p.passed=true;score++;if(score>hi){hi=score;localStorage.setItem('fbhi',hi);}}
+}
+
+groundX=(groundX-PIPE_SPEED)%24;
+
+if(bird.y+bird.r>H-60||bird.y-bird.r<0){
+state='over';return;
+}
+
+for(const p of pipes){
+if(bird.x+bird.r>p.x&&bird.x-bird.r<p.x+PIPE_W){
+if(bird.y-bird.r<p.top||bird.y+bird.r>p.bot){
+state='over';return;
+}
+}
+}
+}
+
+function drawSky(){
+const g=ctx.createLinearGradient(0,0,0,H);
+g.addColorStop(0,'#4dc9f6');g.addColorStop(0.5,'#87ceeb');g.addColorStop(1,'#e0f0ff');
+ctx.fillStyle=g;ctx.fillRect(0,0,W,H);
+}
+
+function drawClouds(){
+for(const cl of clouds){
+cl.x-=cl.speed;
+if(cl.x+80<0){cl.x=W+20;cl.y=30+Math.random()*120;}
+ctx.globalAlpha=0.6;
+ctx.fillStyle='#fff';
+const cx=cl.x,cy=cl.y,s=cl.s;
+ctx.beginPath();
+ctx.ellipse(cx,cy,40*s,18*s,0,0,Math.PI*2);ctx.fill();
+ctx.beginPath();
+ctx.ellipse(cx+25*s,cy-8*s,30*s,15*s,0,0,Math.PI*2);ctx.fill();
+ctx.beginPath();
+ctx.ellipse(cx-20*s,cy+5*s,25*s,12*s,0,0,Math.PI*2);ctx.fill();
+ctx.globalAlpha=1;
+}
+}
+
+function drawGround(){
+ctx.fillStyle='#ded895';
+ctx.fillRect(0,H-60,W,60);
+ctx.fillStyle='#c4a265';
+ctx.fillRect(0,H-60,W,8);
+ctx.fillStyle='#7a5c2e';
+for(let x=groundX;x<W+24;x+=24){
+ctx.fillRect(x,H-52,16,4);
+ctx.fillRect(x+8,H-44,16,4);
+ctx.fillRect(x+4,H-36,16,4);
+ctx.fillRect(x+12,H-28,16,4);
+ctx.fillRect(x+2,H-20,16,4);
+}
+ctx.fillStyle='#5a3c1e';
+ctx.fillRect(0,H-6,W,6);
+}
+
+function drawPipe(x,top,bot){
+const tw=PIPE_W;
+ctx.fillStyle='#73bf2e';
+ctx.fillRect(x,0,tw,top-20);
+ctx.fillRect(x,bot+20,tw,H-60-bot-20);
+ctx.fillStyle='#5fa823';
+ctx.fillRect(x-4,top-28,tw+8,16);
+ctx.fillRect(x-4,bot+12,tw+8,16);
+ctx.fillStyle='#8dd63e';
+ctx.fillRect(x+4,0,tw-8,top-20);
+ctx.fillRect(x+4,bot+20,tw-8,H-60-bot-20);
+const hl=8;
+ctx.fillStyle='#4a8a1c';
+ctx.fillRect(x,top-2,tw,4);
+ctx.fillRect(x,bot-2,tw,4);
+ctx.fillRect(x+tw/2-1,top-24,2,10);
+ctx.fillRect(x+tw/2-1,bot+14,2,10);
+}
+
+function drawBird(){
+ctx.save();
+ctx.translate(bird.x,bird.y);
+ctx.rotate(bird.rot);
+const r=bird.r;
+ctx.fillStyle='#f5c842';
+ctx.beginPath();
+ctx.arc(0,0,r,0,Math.PI*2);
+ctx.fill();
+ctx.fillStyle='#e8a020';
+ctx.beginPath();
+ctx.arc(-r*0.5,0,r*0.25,0,Math.PI*2);
+ctx.fill();
+ctx.fillStyle='#fff';
+ctx.beginPath();
+ctx.arc(r*0.15,-r*0.25,r*0.35,0,Math.PI*2);
+ctx.fill();
+ctx.fillStyle='#222';
+ctx.beginPath();
+ctx.arc(r*0.25,-r*0.22,r*0.18,0,Math.PI*2);
+ctx.fill();
+ctx.fillStyle='#e86820';
+ctx.beginPath();
+ctx.moveTo(r*0.6,-r*0.1);
+ctx.lineTo(r*1.1,-r*0.05);
+ctx.lineTo(r*0.6,r*0.15);
+ctx.closePath();
+ctx.fill();
+const wingY=bird.flap>0?-r*0.3:r*0.1;
+ctx.fillStyle='#e8a020';
+ctx.beginPath();
+ctx.ellipse(-r*0.3,wingY,r*0.45,r*0.2,-0.3,0,Math.PI*2);
+ctx.fill();
+ctx.restore();
+}
+
+function draw(){
+ctx.clearRect(0,0,W,H);
+drawSky();
+drawClouds();
+for(const p of pipes)drawPipe(p.x,p.top,p.bot);
+drawGround();
+drawBird();
+
+ctx.fillStyle='#fff';
+ctx.font='bold 40px Arial';
+ctx.textAlign='center';
+ctx.shadowColor='rgba(0,0,0,0.3)';
+ctx.shadowBlur=6;
+ctx.fillText(score,W/2,60);
+ctx.shadowBlur=0;
+
+if(hi>0){
+ctx.font='14px Arial';
+ctx.fillStyle='rgba(255,255,255,0.5)';
+ctx.fillText('BEST: '+hi,W/2,84);
+}
+
+if(state==='idle'){
+ctx.fillStyle='rgba(0,0,0,0.3)';
+ctx.fillRect(0,0,W,H);
+ctx.fillStyle='#fff';
+ctx.font='bold 28px Arial';
+ctx.shadowColor='rgba(0,0,0,0.5)';
+ctx.shadowBlur=10;
+ctx.fillText('FLAPPY BIRD',W/2,180);
+ctx.font='16px Arial';
+ctx.fillText('Tap / Space / Click',W/2,260);
+ctx.shadowBlur=0;
+}
+if(state==='over'){
+ctx.fillStyle='rgba(0,0,0,0.5)';
+ctx.fillRect(0,0,W,H);
+ctx.fillStyle='#fff';
+ctx.font='bold 36px Arial';
+ctx.shadowColor='rgba(0,0,0,0.5)';
+ctx.shadowBlur=10;
+ctx.fillText('GAME OVER',W/2,220);
+ctx.font='20px Arial';
+ctx.fillText('Score: '+score,W/2,280);
+ctx.fillText('Best: '+hi,W/2,315);
+ctx.font='15px Arial';
+ctx.fillText('Press START to play again',W/2,380);
+ctx.shadowBlur=0;
+}
+}
+
+function loop(t){
+const dt=Math.min((t-last)/1000,0.05);last=t;
+update(dt);
+draw();
+requestAnimationFrame(loop);
+}
+
+function startGame(){
+reset();state='idle';
+}
+
+document.getElementById('startBtn').addEventListener('click',()=>{reset();state='idle';});
+c.addEventListener('click',flap);
+c.addEventListener('touchstart',e=>{e.preventDefault();flap();});
+document.addEventListener('keydown',e=>{
+if(e.key===' '||e.key==='Space'){e.preventDefault();flap();}
+if(e.key==='Enter'){reset();state='idle';}
+});
+
+reset();last=performance.now();requestAnimationFrame(loop);
+</script>
+</body>
+</html>
